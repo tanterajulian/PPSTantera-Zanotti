@@ -17,21 +17,26 @@ import time
 
 
 detector = hub.load("https://tfhub.dev/tensorflow/efficientdet/lite2/detection/1")
-labels = pd.read_csv('/home/julian/StereoVisionDepthEstimation/labels.csv',sep=';',index_col='ID')
+labels = pd.read_csv('/home/julian/PPSTantera-Zanotti/StereoVisionDepthEstimation/labels.csv',sep=';',index_col='ID')
 labels = labels['OBJECT (2017 REL.)']
 
 # Open both cameras
 cap_right = cv2.VideoCapture(0)  #!Inicia camara derecha               
 cap_left =  cv2.VideoCapture(1)  #!Inicia camara izquierda
 
+cap_right.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
+cap_left.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
+
 # Stereo vision setup parameters
 frame_rate = 120    #Camera frame rate (maximum at 120 fps)
-B = 12               #Distance between the cameras [cm]
-f = 7.8             #Camera lense's focal length [mm]
-alpha = 68.6        #Camera field of view in the horisontal plane [degrees]
+B = 9               #Distance between the cameras [cm]
+f = 8              #Camera lense's focal length [mm]
+alpha = 56.6       #Camera field of view in the horisontal plane [degrees]
 
 # Main program loop with face detector and depth estimation using stereo vision
 #while(cap_right.isOpened() and cap_left.isOpened()): #! mientras que las camaras estan online
+depth_arr = []
+
 while(True):
 
     succes_right, frame_right = cap_right.read() #! lee los cuadros de las camaras
@@ -48,7 +53,7 @@ while(True):
         break
 
     else:
-
+        
         start = time.time()
         
         # Convert the BGR image to RGB
@@ -86,12 +91,10 @@ while(True):
         # Convert the RGB image to BGR
         frame_right = cv2.cvtColor(frame_right, cv2.COLOR_RGB2BGR)
         frame_left = cv2.cvtColor(frame_left, cv2.COLOR_RGB2BGR)
-
+        
 
         ################## CALCULATING DEPTH #########################################################
 
-        center_right = 0
-        center_left = 0
 
         # if num_detections_r > 0:
         #     for id, detection in enumerate(results_right.detections):
@@ -106,47 +109,65 @@ while(True):
         #         center_point_right = (boundBox[0] + boundBox[2] / 2, boundBox[1] + boundBox[3] / 2)
 
         #         cv2.putText(frame_right, f'{int(detection.score[0]*100)}%', (boundBox[0], boundBox[1] - 20), cv2.FONT_HERSHEY_SIMPLEX, 2, (0,255,0), 2)
-        
+
         for score, (ymin,xmin,ymax,xmax), label in zip(pred_scores_r, pred_boxes_r, pred_labels_r):
-            
+
             if score < 0.3:
-                continue 
-            print("entro if score")
+                nobody = 1
+                continue
+            
             score_txt = f'{100 * round(score,0)}'
             if label == "person":
-                print("entro label")
+                nobody = 0
+                #area_clear = 0
                 img_boxes = cv2.rectangle(frame_right,(xmin, ymax),(xmax, ymin),(0,255,0),1)
-                center_point_right = (xmax + xmin) / 2 , (ymax + ymin) / 2      
+                center_point_right = (xmax + xmin) / 2 , (ymax + ymin) / 2
+                #print("punto ", center_point_right)        
                 font = cv2.FONT_HERSHEY_SIMPLEX
                 cv2.putText(img_boxes,label,(xmin, ymax-10), font, 0.5, (255,0,0), 1, cv2.LINE_AA)
-                cv2.putText(img_boxes,score_txt,(xmax, ymax-10), font, 0.5, (255,0,0), 1, cv2.LINE_AA)
+                print(center_point_right)
 
         for score, (ymin,xmin,ymax,xmax), label in zip(pred_scores_l, pred_boxes_l, pred_labels_l):
+            
             if score < 0.3:
                 continue
-            print("entro if score2")
             score_txt = f'{100 * round(score,0)}'
             if label == "person":
+                nobody = 0
+                #area_clear = 0
                 img_boxes = cv2.rectangle(frame_left,(xmin, ymax),(xmax, ymin),(0,255,0),1)
-                center_point_left = (xmax + xmin) / 2 , (ymax + ymin) / 2      
+                center_point_left = (xmax + xmin) / 2 , (ymax + ymin) / 2
+                #print("punto ", center_point_left)      
                 font = cv2.FONT_HERSHEY_SIMPLEX
                 cv2.putText(img_boxes,label,(xmin, ymax-10), font, 0.5, (255,0,0), 1, cv2.LINE_AA)
                 cv2.putText(img_boxes,score_txt,(xmax, ymax-10), font, 0.5, (255,0,0), 1, cv2.LINE_AA)
+                print(center_point_left)
 
 
+        # Function to calculate depth of object. 
+        if nobody == 0:
+            print("midiendo")
+            depth = tri.find_depth(center_point_right, center_point_left, frame_right, frame_left, B, f, alpha)
 
+            cv2.putText(frame_right, "Distance: " + str(round(depth,1)), (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0,255,0),3)
+            cv2.putText(frame_left, "Distance: " + str(round(depth,1)), (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0,255,0),3)
+            # Multiply computer value with 205.8 to get real-life depth in [cm]. The factor was found manually.
+            print("Depth: ", str(round(depth,1)))
+            depth_arr.append(depth)
+            
+            if len(depth_arr) > 10:
+                depth_arr.pop(0)                #borramos el primer valor que se encuentre en el array
+            
+            depth_prom = np.mean(depth_arr)     #calculamos el promedio de las mediciones existentes en el array
 
+            print
 
-            # Function to calculate depth of object. Outputs vector of all depths in case of several balls.
-            # All formulas used to find depth is in video presentaion
-        depth = tri.find_depth(center_point_right, center_point_left, frame_right, frame_left, B, f, alpha)
-
-        cv2.putText(frame_right, "Distance: " + str(round(depth,1)), (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0,255,0),3)
-        cv2.putText(frame_left, "Distance: " + str(round(depth,1)), (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0,255,0),3)
-        # Multiply computer value with 205.8 to get real-life depth in [cm]. The factor was found manually.
-        print("Depth: ", str(round(depth,1)))
-
-
+            print("medida promedio:", depth_prom)
+        
+        else:
+            cv2.putText(frame_left, "Area Clear", (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0,255,0),3)
+            cv2.putText(frame_right, "Area Clear", (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0,255,0),3)
+            print("no hay nadie")
 
         end = time.time()
         totalTime = end - start
