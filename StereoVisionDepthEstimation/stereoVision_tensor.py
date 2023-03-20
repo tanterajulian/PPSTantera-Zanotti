@@ -5,11 +5,12 @@ import imutils
 import tensorflow_hub as hub
 import tensorflow as tf
 import pandas as pd
+from filterpy.kalman import KalmanFilter
 
 from matplotlib import pyplot as plt
 
 # Function for stereo vision and depth estimation
-import triangulation as tri
+import triangulation2 as tri
 import calibration
 
 # Mediapipe for face detection
@@ -21,21 +22,38 @@ labels = pd.read_csv('/home/julian/PPSTantera-Zanotti/StereoVisionDepthEstimatio
 labels = labels['OBJECT (2017 REL.)']
 
 # Open both cameras
-cap_right = cv2.VideoCapture(0)  #!Inicia camara derecha               
-cap_left =  cv2.VideoCapture(1)  #!Inicia camara izquierda
+cap_right = cv2.VideoCapture(1)  #!Inicia camara derecha               
+cap_left =  cv2.VideoCapture(0)  #!Inicia camara izquierda
 
 cap_right.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
 cap_left.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
 
+cap_right.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+cap_right.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+
+cap_left.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+cap_left.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+
 # Stereo vision setup parameters
 frame_rate = 120    #Camera frame rate (maximum at 120 fps)
-B = 9               #Distance between the cameras [cm]
-f = 8              #Camera lense's focal length [mm]
-alpha = 56.6       #Camera field of view in the horisontal plane [degrees]
+B = 14               #Distance between the cameras [cm]
+f = 7.8             #Camera lense's focal length [mm]
+alpha = 68.6        #Camera field of view in the horisontal plane [degrees]
 
 # Main program loop with face detector and depth estimation using stereo vision
 #while(cap_right.isOpened() and cap_left.isOpened()): #! mientras que las camaras estan online
 depth_arr = []
+
+# Define the Kalman filter
+kf = KalmanFilter(dim_x=1, dim_z=1)
+kf.x = np.array([0])  # Initial state estimate
+kf.F = np.array([[1]])  # State transition matrix
+kf.H = np.array([[1]])  # Measurement matrix
+kf.P = np.array([[1]])  # Covariance matrix of initial state estimate
+kf.Q = np.array([[0.01]])  # Process noise covariance matrix
+kf.R = np.array([[1]])  # Measurement noise covariance matrix
+
+depth2_filtered = []
 
 while(True):
 
@@ -146,23 +164,37 @@ while(True):
 
         # Function to calculate depth of object. 
         if nobody == 0:
-            print("midiendo")
+
             depth = tri.find_depth(center_point_right, center_point_left, frame_right, frame_left, B, f, alpha)
 
-            cv2.putText(frame_right, "Distance: " + str(round(depth,1)), (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0,255,0),3)
-            cv2.putText(frame_left, "Distance: " + str(round(depth,1)), (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0,255,0),3)
+            depth2 = depth*267621
+
+            # Update the Kalman filter with the measurement
+            kf.predict()
+            kf.update(depth2)
+
+            # cv2.putText(frame_right, "Distance: " + str(round(depth2,1)), (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0,255,0),3)
+            # cv2.putText(frame_left, "Distance: " + str(round(depth2,1)), (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0,255,0),3)
             # Multiply computer value with 205.8 to get real-life depth in [cm]. The factor was found manually.
-            print("Depth: ", str(round(depth,1)))
-            depth_arr.append(depth)
+            # print("Depth: ", str(round(depth2,1)))
+            depth_arr.append(depth2)
+
+            # Get the filtered estimate of depth2
+            depth2_filtered.append(kf.x[0])
+
+            print("DepthKalman: ", kf.x[0])
             
+            # Calculo de distancia teniendo en cuenta ultimas 10 mediciones
+
             if len(depth_arr) > 10:
                 depth_arr.pop(0)                #borramos el primer valor que se encuentre en el array
             
             depth_prom = np.mean(depth_arr)     #calculamos el promedio de las mediciones existentes en el array
+          
+            cv2.putText(frame_right, "Distance: " + str(round(depth_prom,1)), (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0,255,0),3)
+            cv2.putText(frame_left, "Distance: " + str(round(depth_prom,1)), (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0,255,0),3)
 
-            print
-
-            print("medida promedio:", depth_prom)
+            print("DepthPromedio:", depth_prom)
         
         else:
             cv2.putText(frame_left, "Area Clear", (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0,255,0),3)
