@@ -36,7 +36,7 @@ cap_left.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 
 # Stereo vision setup parameters
 frame_rate = 120    #Camera frame rate (maximum at 120 fps)
-B = 14               #Distance between the cameras [cm]
+B = 15               #Distance between the cameras [cm]
 f = 7.8             #Camera lense's focal length [mm]
 alpha = 68.6        #Camera field of view in the horisontal plane [degrees]
 
@@ -167,7 +167,7 @@ while(True):
 
             depth = tri.find_depth(center_point_right, center_point_left, frame_right, frame_left, B, f, alpha)
 
-            depth2 = depth*267621
+            depth2 = depth*428769
 
             # Update the Kalman filter with the measurement
             kf.predict()

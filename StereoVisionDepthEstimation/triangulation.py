@@ -6,6 +6,9 @@ import time
 
 def find_depth(right_point, left_point, frame_right, frame_left, baseline,f, alpha):
 
+    x_right = 0
+    x_left = 0
+
     # CONVERT FOCAL LENGTH f FROM [mm] TO [pixel]:
     height_right, width_right, depth_right = frame_right.shape
     height_left, width_left, depth_left = frame_left.shape

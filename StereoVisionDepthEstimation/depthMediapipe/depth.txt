@@ -1,0 +1,5 @@
+1. Mide distancia entre diferentes puntos del cuerpo
+2. Coloca un box en nariz y mide distancia
+3. Genera box en cuerpo pero no es preciso.
+
+

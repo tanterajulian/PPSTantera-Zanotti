@@ -9,8 +9,6 @@ import glob
 chessboardSize = (9,6)
 frameSize = (640,480)
 
-
-
 # termination criteria
 criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 
@@ -19,15 +17,15 @@ criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 objp = np.zeros((chessboardSize[0] * chessboardSize[1], 3), np.float32)
 objp[:,:2] = np.mgrid[0:chessboardSize[0],0:chessboardSize[1]].T.reshape(-1,2)
 
+objp1 = objp * 22
 
 # Arrays to store object points and image points from all the images.
 objpoints = [] # 3d point in real world space
 imgpointsL = [] # 2d points in image plane.
 imgpointsR = [] # 2d points in image plane.
 
-
-imagesLeft = glob.glob('images/stereoLeft/*.png')
-imagesRight = glob.glob('images/stereoRight/*.png')
+imagesLeft = sorted(glob.glob('images/stereoLeft/*.png'))
+imagesRight = sorted(glob.glob('images/stereoRight/*.png'))
 
 for imgLeft, imgRight in zip(imagesLeft, imagesRight):
 
@@ -43,7 +41,7 @@ for imgLeft, imgRight in zip(imagesLeft, imagesRight):
     # If found, add object points, image points (after refining them)
     if retL and retR == True:
 
-        objpoints.append(objp)
+        objpoints.append(objp1)
 
         cornersL = cv.cornerSubPix(grayL, cornersL, (11,11), (-1,-1), criteria)
         imgpointsL.append(cornersL)
