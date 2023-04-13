@@ -22,8 +22,8 @@ labels = pd.read_csv('/home/julian/PPSTantera-Zanotti/StereoVisionDepthEstimatio
 labels = labels['OBJECT (2017 REL.)']
 
 # Open both cameras
-cap_right = cv2.VideoCapture(1)  #!Inicia camara derecha               
-cap_left =  cv2.VideoCapture(0)  #!Inicia camara izquierda
+cap_right = cv2.VideoCapture(0)  #!Inicia camara derecha               
+cap_left =  cv2.VideoCapture(1)  #!Inicia camara izquierda
 
 cap_right.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
 cap_left.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
@@ -36,7 +36,7 @@ cap_left.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
 # Stereo vision setup parameters
 frame_rate = 120    #Camera frame rate (maximum at 120 fps)
-B = 9               #Distance between the cameras [cm]
+B = 15              #Distance between the cameras [cm]
 f = 7.8             #Camera lense's focal length [mm]
 alpha = 68.6        #Camera field of view in the horisontal plane [degrees]
 
