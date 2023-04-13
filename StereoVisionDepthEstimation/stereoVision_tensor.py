@@ -28,15 +28,15 @@ cap_left =  cv2.VideoCapture(0)  #!Inicia camara izquierda
 cap_right.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
 cap_left.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
 
-cap_right.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-cap_right.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+cap_right.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+cap_right.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
-cap_left.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-cap_left.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+cap_left.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+cap_left.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
 # Stereo vision setup parameters
 frame_rate = 120    #Camera frame rate (maximum at 120 fps)
-B = 15               #Distance between the cameras [cm]
+B = 9               #Distance between the cameras [cm]
 f = 7.8             #Camera lense's focal length [mm]
 alpha = 68.6        #Camera field of view in the horisontal plane [degrees]
 
@@ -128,10 +128,12 @@ while(True):
 
         #         cv2.putText(frame_right, f'{int(detection.score[0]*100)}%', (boundBox[0], boundBox[1] - 20), cv2.FONT_HERSHEY_SIMPLEX, 2, (0,255,0), 2)
 
+        center_point_right = 0
+        center_point_left = 0
+
         for score, (ymin,xmin,ymax,xmax), label in zip(pred_scores_r, pred_boxes_r, pred_labels_r):
 
             if score < 0.3:
-                nobody = 1
                 continue
             
             score_txt = f'{100 * round(score,0)}'
@@ -149,6 +151,7 @@ while(True):
             
             if score < 0.3:
                 continue
+
             score_txt = f'{100 * round(score,0)}'
             if label == "person":
                 nobody = 0
@@ -163,21 +166,22 @@ while(True):
 
 
         # Function to calculate depth of object. 
-        if nobody == 0:
-
+        if center_point_left != 0 and center_point_right != 0:
+            print("punto ", center_point_right)
+            print("punto ", center_point_left)
             depth = tri.find_depth(center_point_right, center_point_left, frame_right, frame_left, B, f, alpha)
 
-            depth2 = depth*428769
+            depth_cm = depth*100
 
             # Update the Kalman filter with the measurement
             kf.predict()
-            kf.update(depth2)
+            kf.update(depth_cm)
 
             # cv2.putText(frame_right, "Distance: " + str(round(depth2,1)), (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0,255,0),3)
             # cv2.putText(frame_left, "Distance: " + str(round(depth2,1)), (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0,255,0),3)
             # Multiply computer value with 205.8 to get real-life depth in [cm]. The factor was found manually.
             # print("Depth: ", str(round(depth2,1)))
-            depth_arr.append(depth2)
+            depth_arr.append(depth_cm)
 
             # Get the filtered estimate of depth2
             depth2_filtered.append(kf.x[0])
