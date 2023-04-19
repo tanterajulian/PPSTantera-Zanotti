@@ -55,6 +55,17 @@ kf.R = np.array([[1]])  # Measurement noise covariance matrix
 
 depth2_filtered = []
 
+# Datos de medidas reales y estimadas
+real_distances = np.array([100, 200, 300, 400, 500])
+estimated_distances = np.array([185, 299, 361, 420, 450])
+
+# Ajuste de polinomio
+polyfit_coeffs = np.polyfit(estimated_distances, real_distances, deg=4)
+
+# Función polinómica para estimar distancia real a partir de la medida estimada
+def estimated_to_real(estimated_distance):
+    return np.polyval(polyfit_coeffs, estimated_distance)
+
 while(True):
 
     succes_right, frame_right = cap_right.read() #! lee los cuadros de las camaras
@@ -133,10 +144,10 @@ while(True):
 
         for score, (ymin,xmin,ymax,xmax), label in zip(pred_scores_r, pred_boxes_r, pred_labels_r):
 
-            if score < 0.3:
+            if score < 0.6:
                 continue
             
-            score_txt = f'{100 * round(score,0)}'
+            score_txt = f'{100.00 * round(score,2)}'
             if label == "person":
                 nobody = 0
                 #area_clear = 0
@@ -145,14 +156,14 @@ while(True):
                 #print("punto ", center_point_right)        
                 font = cv2.FONT_HERSHEY_SIMPLEX
                 cv2.putText(img_boxes,label,(xmin, ymax-10), font, 0.5, (255,0,0), 1, cv2.LINE_AA)
-                print(center_point_right)
+                cv2.putText(img_boxes,score_txt,(xmax, ymax-10), font, 0.5, (255,0,0), 1, cv2.LINE_AA)
 
         for score, (ymin,xmin,ymax,xmax), label in zip(pred_scores_l, pred_boxes_l, pred_labels_l):
             
-            if score < 0.3:
+            if score < 0.6:
                 continue
 
-            score_txt = f'{100 * round(score,0)}'
+            score_txt = f'{100.00 * round(score,2)}'
             if label == "person":
                 nobody = 0
                 #area_clear = 0
@@ -162,13 +173,11 @@ while(True):
                 font = cv2.FONT_HERSHEY_SIMPLEX
                 cv2.putText(img_boxes,label,(xmin, ymax-10), font, 0.5, (255,0,0), 1, cv2.LINE_AA)
                 cv2.putText(img_boxes,score_txt,(xmax, ymax-10), font, 0.5, (255,0,0), 1, cv2.LINE_AA)
-                print(center_point_left)
 
 
         # Function to calculate depth of object. 
         if center_point_left != 0 and center_point_right != 0:
-            print("punto ", center_point_right)
-            print("punto ", center_point_left)
+ 
             depth = tri.find_depth(center_point_right, center_point_left, frame_right, frame_left, B, f, alpha)
 
             depth_cm = depth*100
@@ -194,11 +203,16 @@ while(True):
                 depth_arr.pop(0)                #borramos el primer valor que se encuentre en el array
             
             depth_prom = np.mean(depth_arr)     #calculamos el promedio de las mediciones existentes en el array
-          
-            cv2.putText(frame_right, "Distance: " + str(round(depth_prom,1)), (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0,255,0),3)
-            cv2.putText(frame_left, "Distance: " + str(round(depth_prom,1)), (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0,255,0),3)
 
-            print("DepthPromedio:", depth_prom)
+            # Ejemplo de uso
+            real_distance = estimated_to_real(depth_prom)
+            # real_distance = depth_prom
+            print("Distancia real estimada para una medida de", depth_prom, "es:", real_distance, "cm")
+          
+            cv2.putText(frame_right, "Distance: " + str(round(real_distance,1)), (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0,255,0),3)
+            cv2.putText(frame_left, "Distance: " + str(round(real_distance,1)), (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0,255,0),3)
+
+            print("DepthPromedio:", real_distance)
         
         else:
             cv2.putText(frame_left, "Area Clear", (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0,255,0),3)
