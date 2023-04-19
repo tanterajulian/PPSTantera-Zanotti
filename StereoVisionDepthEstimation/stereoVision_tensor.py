@@ -36,7 +36,7 @@ cap_left.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
 # Stereo vision setup parameters
 frame_rate = 120    #Camera frame rate (maximum at 120 fps)
-B = 15              #Distance between the cameras [cm]
+B = 20             #Distance between the cameras [cm]
 f = 7.8             #Camera lense's focal length [mm]
 alpha = 68.6        #Camera field of view in the horisontal plane [degrees]
 

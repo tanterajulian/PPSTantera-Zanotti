@@ -6,7 +6,7 @@ import glob
 
 ################ FIND CHESSBOARD CORNERS - OBJECT POINTS AND IMAGE POINTS #############################
 
-chessboardSize = (9,6)
+chessboardSize = (8,6)
 frameSize = (640,480)
 
 # termination criteria
@@ -17,7 +17,7 @@ criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 objp = np.zeros((chessboardSize[0] * chessboardSize[1], 3), np.float32)
 objp[:,:2] = np.mgrid[0:chessboardSize[0],0:chessboardSize[1]].T.reshape(-1,2)
 
-objp1 = objp * 22
+objp1 = objp * 35
 
 # Arrays to store object points and image points from all the images.
 objpoints = [] # 3d point in real world space
