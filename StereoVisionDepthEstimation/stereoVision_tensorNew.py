@@ -17,22 +17,37 @@ import calibration
 import time
 
 
-detector = hub.load("https://tfhub.dev/tensorflow/efficientdet/lite2/detection/1")
-labels = pd.read_csv('/home/julian/PPSTantera-Zanotti/StereoVisionDepthEstimation/labels.csv',sep=';',index_col='ID')
+gpus = tf.config.experimental.list_physical_devices('GPU')
+if gpus:
+  # Restrict TensorFlow to only allocate 1GB of memory on the first GPU
+  try:
+    tf.config.experimental.set_virtual_device_configuration(
+        gpus[0],
+        [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=2048)])
+    logical_gpus = tf.config.experimental.list_logical_devices('GPU')
+    print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
+  except RuntimeError as e:
+    # Virtual devices must be set before GPUs have been initialized
+    print(e)
+
+detector = hub.load("https://tfhub.dev/tensorflow/ssd_mobilenet_v2/2")
+labels = pd.read_csv('./labels.csv',sep=';',index_col='ID')
 labels = labels['OBJECT (2017 REL.)']
 
+dev_L = 0
+dev_R = 1
+width = 1280
+height = 720
 # Open both cameras
-cap_right = cv2.VideoCapture(1)  #!Inicia camara derecha               
-cap_left =  cv2.VideoCapture(0)  #!Inicia camara izquierda
+gst_str_L = ('v4l2src device=/dev/video{} ! '
+               'video/x-raw, width=(int){}, height=(int){} ! '
+               'videoconvert ! appsink').format(dev_L, width, height)
+gst_str_R = ('v4l2src device=/dev/video{} ! '
+               'video/x-raw, width=(int){}, height=(int){} ! '
+               'videoconvert ! appsink').format(dev_R, width, height)
 
-cap_right.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
-cap_left.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
-
-cap_right.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-cap_right.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-
-cap_left.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-cap_left.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+cap_left = cv2.VideoCapture(gst_str_L, cv2.CAP_GSTREAMER)
+cap_right = cv2.VideoCapture(gst_str_R, cv2.CAP_GSTREAMER)
 
 # Stereo vision setup parameters
 frame_rate = 120    #Camera frame rate (maximum at 120 fps)
@@ -88,16 +103,11 @@ while(True):
         frame_right_tensor = tf.expand_dims(frame_right_tensor , 0)
         frame_left_tensor = tf.expand_dims(frame_left_tensor , 0)
         
-        boxes_r, scores_r, classes_r, num_detections_r = detector(frame_right_tensor)
-        boxes_l, scores_l, classes_l, num_detections_l = detector(frame_left_tensor)
+        num_detections_r, boxes_r, scores_r, classes_r,_,_,_,_ = detector(frame_right_tensor)
+        num_detections_l, boxes_l, scores_l, classes_l,_,_,_,_ = detector(frame_left_tensor)
         
-        
-        pred_labels_r = classes_r.numpy().astype('int')[0]
-        pred_labels_l = classes_l.numpy().astype('int')[0]
-
-        
-        pred_labels_r = [labels[i] for i in pred_labels_r]
-        pred_labels_l = [labels[i] for i in pred_labels_l]
+        pred_labels_r = [labels[i] for i in classes_r]
+        pred_labels_l = [labels[i] for i in classes_l]
 
         pred_boxes_r = boxes_r.numpy()[0].astype('int')
         pred_boxes_l = boxes_l.numpy()[0].astype('int')

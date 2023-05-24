@@ -5,8 +5,8 @@ import glob
 
 ################ FIND CHESSBOARD CORNERS - OBJECT POINTS AND IMAGE POINTS #############################
 
-chessboardSize = (9,6)
-frameSize = (640,480)
+chessboardSize = (8,6)
+frameSize = (1280,720)
 
 
 # termination criteria

@@ -1,30 +1,37 @@
 import cv2
 
-cap = cv2.VideoCapture(1)   #camara izquierda
-cap2 = cv2.VideoCapture(0)  #camara derecha
+dev_L = 0
+dev_R = 1
+width = 1280
+height = 720
+# Open both cameras
+gst_str_L = ('v4l2src device=/dev/video{} ! '
+               'video/x-raw, width=(int){}, height=(int){} ! '
+               'videoconvert ! appsink').format(dev_L, width, height)
+gst_str_R = ('v4l2src device=/dev/video{} ! '
+               'video/x-raw, width=(int){}, height=(int){} ! '
+               'videoconvert ! appsink').format(dev_R, width, height)
 
-cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-
-cap2.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-cap2.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+capL = cv2.VideoCapture(gst_str_L, cv2.CAP_GSTREAMER)
+capR = cv2.VideoCapture(gst_str_R, cv2.CAP_GSTREAMER)
 
 num = 0
 
-while cap.isOpened():
 
-    succes1, img = cap.read()
-    succes2, img2 = cap2.read()
+while capL.isOpened() and capR.isOpened():
+
+    successL, imgL = capL.read()
+    successR, imgR = capR.read()
 
     k = cv2.waitKey(5)
 
     if k == 27:
         break
     elif k == ord('s'): # wait for 's' key to save and exit
-        cv2.imwrite('images/stereoLeft/imageL' + str(num) + '.png', img)
-        cv2.imwrite('images/stereoRight/imageR' + str(num) + '.png', img2)
+        cv2.imwrite('images/stereoLeft/imageL' + str(num) + '.png', imgL)
+        cv2.imwrite('images/stereoRight/imageR' + str(num) + '.png', imgR)
         print("images saved!")
         num += 1
 
-    cv2.imshow('Img 1',img)
-    cv2.imshow('Img 2',img2)
+    cv2.imshow('Img L',imgL)
+    cv2.imshow('Img R',imgR)
