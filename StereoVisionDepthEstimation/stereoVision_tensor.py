@@ -10,7 +10,7 @@ from filterpy.kalman import KalmanFilter
 from matplotlib import pyplot as plt
 
 # Function for stereo vision and depth estimation
-import triangulation2 as tri
+import triangulationChat as tri
 import calibration
 
 # Mediapipe for face detection
