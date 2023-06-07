@@ -1,39 +1,42 @@
 import cv2
 import numpy as np
-import time
-import imutils
-import tensorflow_hub as hub
-import tensorflow as tf
-import pandas as pd
 from filterpy.kalman import KalmanFilter
 import datetime
 
-from matplotlib import pyplot as plt
 
 # Function for stereo vision and depth estimation
 import triangulation2 as tri
 import calibration
 
-# Mediapipe for face detection
-import time
 
+from jetson.inference import detectNet
+from jetson.utils import videoOutput, videoSource, cudaAllocMapped, cudaConvertColor, cudaDeviceSynchronize, cudaToNumpy
 
-detector = hub.load("https://tfhub.dev/tensorflow/efficientdet/lite2/detection/1")
-labels = pd.read_csv('/home/julian/PPSTantera-Zanotti/StereoVisionDepthEstimation/labels.csv',sep=';',index_col='ID')
-labels = labels['OBJECT (2017 REL.)']
+import sys
+import argparse
 
-# Open both cameras
-cap_right = cv2.VideoCapture(1)  #!Inicia camara derecha               
-cap_left =  cv2.VideoCapture(0)  #!Inicia camara izquierda
+parser = argparse.ArgumentParser()
+parser.add_argument("output", type=str, default="", nargs='?', help="URI of the output stream")
+parser.add_argument("--network", type=str, default="ssd-mobilenet-v2", help="pre-trained model to load (see below for options)")
+parser.add_argument("--overlay", type=str, default="box,labels,conf", help="detection overlay flags (e.g. --overlay=box,labels,conf)\nvalid combinations are:  'box', 'labels', 'conf', 'none'")
+parser.add_argument("--threshold", type=float, default=0.5, help="minimum detection threshold to use")
 
-cap_right.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
-cap_left.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
+is_headless = ["--headless"] if sys.argv[0].find('console.py') != -1 else [""]
 
-cap_right.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-cap_right.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+try:
+	args = parser.parse_known_args()[0]
+except:
+	print("")
+	parser.print_help()
+	sys.exit(0)
 
-cap_left.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-cap_left.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+input0 = videoSource('/dev/video0', argv=sys.argv)
+input1 = videoSource('/dev/video1', argv=sys.argv)
+output0 = videoOutput(args.output, argv=sys.argv+is_headless)
+output1 = videoOutput(args.output, argv=sys.argv+is_headless)
+
+net = detectNet(args.network, sys.argv, args.threshold)
+
 
 # Stereo vision setup parameters
 frame_rate = 30    #Camera frame rate (maximum at 120 fps)
@@ -56,10 +59,39 @@ kf.R = np.array([[1]])  # Measurement noise covariance matrix
 
 depth2_filtered = []
 
-while(True):
+# Datos de medidas reales y estimadas
+real_distances = np.array([100, 200, 300, 400, 500])
+estimated_distances = np.array([185, 299, 361, 420, 450])
 
-    succes_right, frame_right = cap_right.read() #! lee los cuadros de las camaras
-    succes_left, frame_left = cap_left.read()
+# Ajuste de polinomio
+polyfit_coeffs = np.polyfit(estimated_distances, real_distances, deg=4)
+
+# Función polinómica para estimar distancia real a partir de la medida estimada
+def estimated_to_real(estimated_distance):
+    return np.polyval(polyfit_coeffs, estimated_distance)
+
+while(True):
+    img0 = input0.Capture()
+    img1 = input1.Capture()
+
+    # convert to BGR, since that's what OpenCV expects
+    bgr_img_0 = cudaAllocMapped(width=img0.width,
+                            height=img0.height,
+                            format='bgr8')
+    bgr_img_1 = cudaAllocMapped(width=img1.width,
+                            height=img1.height,
+                            format='bgr8')
+
+    cudaConvertColor(img0, bgr_img_0)
+    cudaConvertColor(img1, bgr_img_1)
+
+    # make sure the GPU is done work before we convert to cv2
+    cudaDeviceSynchronize()
+
+    # convert to cv2 image (cv2 images are numpy arrays)
+    frame_right = cudaToNumpy(bgr_img_0)
+    frame_left = cudaToNumpy(bgr_img_1)
+
 
 ################## CALIBRATION #########################################################
 
@@ -68,48 +100,14 @@ while(True):
 ########################################################################################
 
     # If cannot catch any frame, break
-    if not succes_right or not succes_left:             
+    if not input0.IsStreaming() or not input1.IsStreaming():             
         break
 
     else:
         
-        start = time.time()
-        
-        # Convert the BGR image to RGB
-        frame_right = cv2.cvtColor(frame_right, cv2.COLOR_BGR2RGB)
-        frame_left = cv2.cvtColor(frame_left, cv2.COLOR_BGR2RGB)
+        detections_right = net.Detect(img0, overlay=args.overlay)
+        detections_left = net.Detect(img1, overlay=args.overlay)
 
-        # Process the image and find faces #!DETECCION
-
-        #Is optional but i recommend (float convertion and convert img to tensor image)
-        frame_right_tensor = tf.convert_to_tensor(frame_right, dtype=tf.uint8)
-        frame_left_tensor = tf.convert_to_tensor(frame_left, dtype=tf.uint8)
-
-        #Add dims to rgb_tensor
-        frame_right_tensor = tf.expand_dims(frame_right_tensor , 0)
-        frame_left_tensor = tf.expand_dims(frame_left_tensor , 0)
-        
-        boxes_r, scores_r, classes_r, num_detections_r = detector(frame_right_tensor)
-        boxes_l, scores_l, classes_l, num_detections_l = detector(frame_left_tensor)
-        
-        
-        pred_labels_r = classes_r.numpy().astype('int')[0]
-        pred_labels_l = classes_l.numpy().astype('int')[0]
-
-        
-        pred_labels_r = [labels[i] for i in pred_labels_r]
-        pred_labels_l = [labels[i] for i in pred_labels_l]
-
-        pred_boxes_r = boxes_r.numpy()[0].astype('int')
-        pred_boxes_l = boxes_l.numpy()[0].astype('int')
-        
-        pred_scores_r = scores_r.numpy()[0]
-        pred_scores_l = scores_l.numpy()[0]
-
-
-        # Convert the RGB image to BGR
-        frame_right = cv2.cvtColor(frame_right, cv2.COLOR_RGB2BGR)
-        frame_left = cv2.cvtColor(frame_left, cv2.COLOR_RGB2BGR)
         
 
         ################## CALCULATING DEPTH #########################################################
@@ -139,8 +137,7 @@ while(True):
 
         # Function to calculate depth of object. 
         if center_point_left != 0 and center_point_right != 0:
-            print("punto ", center_point_right)
-            print("punto ", center_point_left)
+ 
             depth = tri.find_depth(center_point_right, center_point_left, frame_right, frame_left, B, f, alpha)
 
             depth_cm = depth*100
@@ -188,32 +185,13 @@ while(True):
             # print("DepthPromedio:", depth_prom)
         
         else:
-            cv2.putText(frame_left, "Area Clear", (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0,255,0),3)
-            cv2.putText(frame_right, "Area Clear", (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0,255,0),3)
             print("no hay nadie")
 
-        end = time.time()
-        totalTime = end - start
-
-        fps = 1 / totalTime
-        #print("FPS: ", fps)
-
-        cv2.putText(frame_right, f'FPS: {int(fps)}', (20,450), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0,255,0), 2)
-        cv2.putText(frame_left, f'FPS: {int(fps)}', (20,450), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0,255,0), 2)                                   
+        output0.Render(img0)
+        output0.SetStatus("{:s} | Network {:.0f} FPS".format(args.network, net.GetNetworkFPS()))
+        output1.Render(img1)
+        output1.SetStatus("{:s} | Network {:.0f} FPS".format(args.network, net.GetNetworkFPS()))
 
 
-        # Show the frames
-        cv2.imshow("frame right", frame_right) 
-        cv2.imshow("frame left", frame_left)
-
-
-        # Hit "q" to close the window
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-
-
-# Release and destroy all windows before termination
-cap_right.release()
-cap_left.release()
 
 cv2.destroyAllWindows()
