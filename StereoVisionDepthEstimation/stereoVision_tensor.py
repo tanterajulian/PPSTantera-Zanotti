@@ -6,11 +6,12 @@ import tensorflow_hub as hub
 import tensorflow as tf
 import pandas as pd
 from filterpy.kalman import KalmanFilter
+import datetime
 
 from matplotlib import pyplot as plt
 
 # Function for stereo vision and depth estimation
-import triangulationChat as tri
+import triangulation2 as tri
 import calibration
 
 # Mediapipe for face detection
@@ -35,7 +36,7 @@ cap_left.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
 cap_left.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
 # Stereo vision setup parameters
-frame_rate = 120    #Camera frame rate (maximum at 120 fps)
+frame_rate = 30    #Camera frame rate (maximum at 120 fps)
 B = 9               #Distance between the cameras [cm]
 f = 7.8             #Camera lense's focal length [mm]
 alpha = 68.6        #Camera field of view in the horisontal plane [degrees]
@@ -113,56 +114,27 @@ while(True):
 
         ################## CALCULATING DEPTH #########################################################
 
-
-        # if num_detections_r > 0:
-        #     for id, detection in enumerate(results_right.detections):
-        #         mp_draw.draw_detection(frame_right, detection)
-
-        #         bBox = detection.location_data.relative_bounding_box
-
-        #         h, w, c = frame_right.shape
-
-        #         boundBox = int(bBox.xmin * w), int(bBox.ymin * h), int(bBox.width * w), int(bBox.height * h)
-
-        #         center_point_right = (boundBox[0] + boundBox[2] / 2, boundBox[1] + boundBox[3] / 2)
-
-        #         cv2.putText(frame_right, f'{int(detection.score[0]*100)}%', (boundBox[0], boundBox[1] - 20), cv2.FONT_HERSHEY_SIMPLEX, 2, (0,255,0), 2)
-
         center_point_right = 0
         center_point_left = 0
 
-        for score, (ymin,xmin,ymax,xmax), label in zip(pred_scores_r, pred_boxes_r, pred_labels_r):
-
-            if score < 0.3:
-                continue
+        for (score_r, (ymin_r, xmin_r, ymax_r, xmax_r), label_r), (score_l, (ymin_l, xmin_l, ymax_l, xmax_l), label_l) in zip(zip(pred_scores_r, pred_boxes_r, pred_labels_r), zip(pred_scores_l, pred_boxes_l, pred_labels_l)):
             
-            score_txt = f'{100 * round(score,0)}'
-            if label == "person":
+            score_txt = f'{100 * round(score_r,0)}'
+            if label_r == "person" and score_r >= 0.3:
                 nobody = 0
-                #area_clear = 0
-                img_boxes = cv2.rectangle(frame_right,(xmin, ymax),(xmax, ymin),(0,255,0),1)
-                center_point_right = (xmax + xmin) / 2 , (ymax + ymin) / 2
-                #print("punto ", center_point_right)        
+                img_boxes = cv2.rectangle(frame_right, (xmin_r, ymax_r), (xmax_r, ymin_r), (0, 255, 0), 1)
+                center_point_right = ((xmax_r + xmin_r) / 2, (ymax_r + ymin_r) / 2)
                 font = cv2.FONT_HERSHEY_SIMPLEX
-                cv2.putText(img_boxes,label,(xmin, ymax-10), font, 0.5, (255,0,0), 1, cv2.LINE_AA)
-                print(center_point_right)
-
-        for score, (ymin,xmin,ymax,xmax), label in zip(pred_scores_l, pred_boxes_l, pred_labels_l):
+                cv2.putText(img_boxes, label_r, (xmin_r, ymax_r - 10), font, 0.5, (255, 0, 0), 1, cv2.LINE_AA)
             
-            if score < 0.3:
-                continue
-
-            score_txt = f'{100 * round(score,0)}'
-            if label == "person":
+            score_txt = f'{100 * round(score_l,0)}'
+            if label_l == "person" and score_l >= 0.3:
                 nobody = 0
-                #area_clear = 0
-                img_boxes = cv2.rectangle(frame_left,(xmin, ymax),(xmax, ymin),(0,255,0),1)
-                center_point_left = (xmax + xmin) / 2 , (ymax + ymin) / 2
-                #print("punto ", center_point_left)      
+                img_boxes = cv2.rectangle(frame_left, (xmin_l, ymax_l), (xmax_l, ymin_l), (0, 255, 0), 1)
+                center_point_left = ((xmax_l + xmin_l) / 2, (ymax_l + ymin_l) / 2)
                 font = cv2.FONT_HERSHEY_SIMPLEX
-                cv2.putText(img_boxes,label,(xmin, ymax-10), font, 0.5, (255,0,0), 1, cv2.LINE_AA)
-                cv2.putText(img_boxes,score_txt,(xmax, ymax-10), font, 0.5, (255,0,0), 1, cv2.LINE_AA)
-                print(center_point_left)
+                cv2.putText(img_boxes, label_l, (xmin_l, ymax_l - 10), font, 0.5, (255, 0, 0), 1, cv2.LINE_AA)
+                cv2.putText(img_boxes, score_txt, (xmax_l, ymax_l - 10), font, 0.5, (255, 0, 0), 1, cv2.LINE_AA)
 
 
         # Function to calculate depth of object. 
@@ -177,28 +149,43 @@ while(True):
             kf.predict()
             kf.update(depth_cm)
 
-            # cv2.putText(frame_right, "Distance: " + str(round(depth2,1)), (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0,255,0),3)
-            # cv2.putText(frame_left, "Distance: " + str(round(depth2,1)), (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0,255,0),3)
-            # Multiply computer value with 205.8 to get real-life depth in [cm]. The factor was found manually.
-            # print("Depth: ", str(round(depth2,1)))
             depth_arr.append(depth_cm)
 
             # Get the filtered estimate of depth2
             depth2_filtered.append(kf.x[0])
 
             print("DepthKalman: ", kf.x[0])
+
+            #Si la distancia medida es menor a 200, imprimimos en un archivo log 
+
+            if kf.x[0] < 200:
+                current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                with open('/home/julian/PPSTantera-Zanotti/StereoVisionDepthEstimation/logDomo.txt', 'w') as file:
+                    file.write(f"Time: {current_time}, Distancia a la persona: {kf.x[0]}\n")
+
+                # Capture images from each camera
+                ret, left_image = cap_left.read()
+                ret, right_image = cap_right.read()
+
+                # Save the images (overwrite the existing images)
+                left_image_path = "/home/julian/PPSTantera-Zanotti/StereoVisionDepthEstimation/left_image.jpg"
+                right_image_path = "/home/julian/PPSTantera-Zanotti/StereoVisionDepthEstimation/right_image.jpg"
+
+                cv2.imwrite(left_image_path, left_image)
+                cv2.imwrite(right_image_path, right_image)
+
             
             # Calculo de distancia teniendo en cuenta ultimas 10 mediciones
 
-            if len(depth_arr) > 10:
-                depth_arr.pop(0)                #borramos el primer valor que se encuentre en el array
+            # if len(depth_arr) > 10:
+            #     depth_arr.pop(0)                #borramos el primer valor que se encuentre en el array
             
-            depth_prom = np.mean(depth_arr)     #calculamos el promedio de las mediciones existentes en el array
+            # depth_prom = np.mean(depth_arr)     #calculamos el promedio de las mediciones existentes en el array
           
-            cv2.putText(frame_right, "Distance: " + str(round(depth_prom,1)), (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0,255,0),3)
-            cv2.putText(frame_left, "Distance: " + str(round(depth_prom,1)), (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0,255,0),3)
+            # cv2.putText(frame_right, "Distance: " + str(round(depth_prom,1)), (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0,255,0),3)
+            # cv2.putText(frame_left, "Distance: " + str(round(depth_prom,1)), (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0,255,0),3)
 
-            print("DepthPromedio:", depth_prom)
+            # print("DepthPromedio:", depth_prom)
         
         else:
             cv2.putText(frame_left, "Area Clear", (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0,255,0),3)
